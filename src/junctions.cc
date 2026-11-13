@@ -172,13 +172,14 @@ static const string& getBedColor(const string& splice_sites) {
     if (splice_sites == "") {
         return NO_INFO_COLOR;
     }
-    if (splice_sites == "GT/AG") {
+    // GT/AG is used by both spliceosomes and can't be told apart by motif, so it
+    // is reported as U2, the vastly more common case.
+    if ((splice_sites == "GT/AG") or (splice_sites == "GC/AG")) {
         return U2_COLOR;
     }
     if ((splice_sites == "AT/AC") or
-        (splice_sites == "AT/AG") or 
-        (splice_sites == "GT/AC") or
-        (splice_sites == "GT/AG")) {
+        (splice_sites == "AT/AG") or
+        (splice_sites == "GT/AC")) {
         return U12_COLOR;
     }
     return UNKNOWN_COLOR;

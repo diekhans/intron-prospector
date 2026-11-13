@@ -1,5 +1,11 @@
 # Major and user-visible changes
 
+## next release
+* BED color for GC/AG introns is now U2 green rather than unknown red.
+* Help text and man page regenerated; --strandness description was attached to
+  --unsorted and --set-TS-strand-tag carried a stray copy of the --skip-missing-targets
+  text.
+
 ## version 1.5.1 2026-04-22
 * Fixed bug where -S option consumed the next argument
 

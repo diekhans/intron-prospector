@@ -106,8 +106,6 @@ TSV and BED files will be automatically compressed with `gzip` if they end in `.
 
 > Set the TS:A tag in the same manner as `--set-XS-strand-tag`.
 
-> Skip getting splice junctions when target sequence is missing in genome FASTA rather than generate an error and stop.
-
 `-c FILE, --intron-calls=FILE`
 
 > Write a tab-separated values (TSV) file, with the junctions calls.  It will contain the following columns :
