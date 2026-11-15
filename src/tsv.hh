@@ -22,6 +22,7 @@ class Tsv {
     const string tsv_file_;
     AutoGzipInput tsv_fh_;
     int num_columns_;
+    int line_num_;    // line of the current row, counting the header
     ColMap col_map_;  // name to column index
     vector<string> row_;   // current row
 
@@ -38,11 +39,23 @@ class Tsv {
         return words;
     }
     
+    // read a line, dropping the carriage return a CRLF file leaves on it
+    bool read_line(string& line) {
+        if (not getline(tsv_fh_, line)) {
+            return false;
+        }
+        if ((line.size() > 0) and (line[line.size() - 1] == '\r')) {
+            line.resize(line.size() - 1);
+        }
+        return true;
+    }
+
     void read_header() {
         string line;
-        if (not getline(tsv_fh_, line)) {
+        if (not read_line(line)) {
             throw runtime_error("empty TSV file: " + tsv_file_);
         }
+        line_num_ = 1;
         vector<string> words = split_line(line);
         num_columns_ = words.size();
         for (int i = 0; i < num_columns_; i++) {
@@ -55,7 +68,8 @@ class Tsv {
     Tsv(const string& tsv_file):
         tsv_file_(tsv_file),
         tsv_fh_(tsv_file),
-        num_columns_(0) {
+        num_columns_(0),
+        line_num_(0) {
         if (tsv_fh_.bad() | tsv_fh_.fail()) {
             throw runtime_error("can't open " + tsv_file);
         }
@@ -65,12 +79,15 @@ class Tsv {
     // read the next row
     bool next_row() {
         string line;
-        if (not getline(tsv_fh_, line)) {
+        if (not read_line(line)) {
             return false;
         }
+        line_num_++;
         row_ = split_line(line);
-        if (row_.size() != num_columns_) {
-            throw runtime_error("expected " + int_to_string(num_columns_) +  " columns, got " + int_to_string(num_columns_) + ":" + tsv_file_);
+        if (int(row_.size()) != num_columns_) {
+            throw runtime_error("expected " + int_to_string(num_columns_) + " columns, got "
+                                + int_to_string(int(row_.size())) + " on line "
+                                + int_to_string(line_num_) + ": " + tsv_file_);
         }
         return true;
     }

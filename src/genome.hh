@@ -21,7 +21,7 @@ class Genome {
 
     bool has_seq(const string &chrom) const;
 
-    const string fetch(const string &chrom, int start, int end) const;
+    const string fetch(const string &chrom, hts_pos_t start, hts_pos_t end) const;
 };
 
 /* reverse-complement a DNA string */

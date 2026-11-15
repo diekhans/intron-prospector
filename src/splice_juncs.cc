@@ -8,11 +8,11 @@
 
 // add all versions of one of  canonical junctions to set
 static void add_canonical(const string& splice_sites,
-                          int pos,
+                          size_t pos,
                           set<string>& canonicals) {
     canonicals.insert(splice_sites);
     string splice_sites_mod = splice_sites;
-    for (int i = pos; i < splice_sites_mod.size(); i++) {
+    for (size_t i = pos; i < splice_sites_mod.size(); i++) {
         splice_sites_mod[i] = ::toupper(splice_sites_mod[i]);
         add_canonical(splice_sites_mod, i + 1, canonicals);
         splice_sites_mod[i] = ::tolower(splice_sites_mod[i]);

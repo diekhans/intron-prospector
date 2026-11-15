@@ -1,0 +1,4 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:fake10	LN:490400
+minusXS	0	fake10	487551	60	10M704N10M	*	0	0	*	*	NH:i:1	XS:A:-
+plusXS	0	fake10	487551	60	10M704N10M	*	0	0	*	*	NH:i:1	XS:A:+

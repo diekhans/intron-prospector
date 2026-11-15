@@ -1,0 +1,4 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:big	LN:5000000000
+r1	0	big	4300000000	60	10M100N10M	*	0	0	*	*	NH:i:1
+r2	0	big	4300000001	60	10M100N10M	*	0	0	*	*	NH:i:1

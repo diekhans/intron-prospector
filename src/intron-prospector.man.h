@@ -120,7 +120,7 @@
 "  SAM/BAM files are not sorted. This will require more memory, as intron\n"
 "  counts are not collected per chromosome.\n"
 "\n"
-"-X category, --exclude=category\n"
+"-X category, --excludes=category\n"
 "\n"
 "  Exclude reads or introns from this category. Current categories are:\n"
 "  multi - excluding multi-mapped reads.\n"

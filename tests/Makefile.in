@@ -55,7 +55,7 @@ test: intron_prospectorTests intron_prospector_mergeTests
 # intron_prospector tests
 #####
 intron_prospectorTests: basicTests minReadCountTests multiTests fake10Tests regressTests ontTests multiBamTests \
-	sjfilterTests strandTagTests parityTests errorTests
+	sjfilterTests strandTagTests parityTests errorTests defectTests defect2Tests
 
 ###
 # basic tests
@@ -215,7 +215,8 @@ testSortBug: mkout
 # intron_prospector_merge tests
 #####
 intron_prospector_mergeTests: testBasic134Merge testBasic134MergeGz testBasic134LstMerge testFake10abMerge \
-	testStrandConflictMerge testSjFilterCanonMerge testSjFilterAllMerge testSjFilterDefaultMerge \
+	testStrandConflictMerge testStrandConflictMergeOrder \
+	testSjFilterCanonMerge testSjFilterAllMerge testSjFilterDefaultMerge \
 	minReadCountMergeTests mergeErrorTests
 
 testBasic134Merge: mkout
@@ -248,6 +249,14 @@ testStrandConflictMerge: mkout
 	   input/strand-confict/SRR6225360.calls.tsv input/strand-confict/SRR6225362.calls.tsv \
 	   input/strand-confict/SRR6225361.calls.tsv input/strand-confict/SRR6225363.calls.tsv 2> output/$@.err
 	${diff_tsv}
+
+# the strand vote counts the reads of every record, so the merged result is
+# the same whatever order the files are given in
+testStrandConflictMergeOrder: mkout
+	${intron_prospector_merge} --intron-calls=output/$@.introns.tsv \
+	   input/strand-confict/SRR6225361.calls.tsv input/strand-confict/SRR6225363.calls.tsv \
+	   input/strand-confict/SRR6225360.calls.tsv input/strand-confict/SRR6225362.calls.tsv 2> output/$@.err
+	${diff} expected/testStrandConflictMerge.introns.tsv output/$@.introns.tsv
 
 testSjFilterCanonMerge: mkout
 	${intron_prospector_merge} --sj-filter=canon --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv \
@@ -425,6 +434,125 @@ mergeErrorTests: testMergeNoInputs
 testMergeNoInputs: mkout
 	${intron_prospector_merge} --intron-calls=output/$@.introns.tsv > output/$@.err 2>&1 || true
 	${diff} expected/$@.err output/$@.err
+
+
+##
+# regressions for the defects in notes/code-review-defects.org
+##
+defectTests: testUnsortedPassThrough testTargetOrderMultiSam testSingleEndStrandFR \
+	testSingleEndStrandRF testAnchorAfterIndel testShortOptions testNoHeaderError
+
+# small-input options: the test SAMs hold one read per junction
+small = ${conf0} --min-anchor-length=1 --min-intron-length=5
+
+# the unsorted path must write the pass-through, as the sorted path does
+testUnsortedPassThrough: mkout
+	${intron_prospector} --unsorted ${conf0} --intron-calls=output/$@.introns.tsv --pass-through=output/$@.sam ${basic_sam}
+	${diff_tsv}
+	${diff} ${basic_sam} output/$@.sam
+
+# the target names of one file must not index the junctions of the next; the
+# two headers name the same targets in opposite order
+testTargetOrderMultiSam: mkout
+	${intron_prospector} ${small} --intron-calls=output/$@.introns.tsv input/target-order-a.sam input/target-order-b.sam
+	${diff_tsv}
+
+# an unpaired read carries neither mate flag, so its strand comes from its
+# orientation and the library alone
+testSingleEndStrandFR: mkout
+	${intron_prospector} ${small} --strandness=FR --intron-calls=output/$@.introns.tsv input/single-end-strand.sam
+	${diff_tsv}
+
+testSingleEndStrandRF: mkout
+	${intron_prospector} ${small} --strandness=RF --intron-calls=output/$@.introns.tsv input/single-end-strand.sam
+	${diff_tsv}
+
+# the anchor after an indel break is clean, so the indel does not shorten it;
+# both junctions have a ten base anchor and pass at a threshold of ten
+testAnchorAfterIndel: mkout
+	${intron_prospector} ${conf0} --min-anchor-length=10 --min-intron-length=5 --intron-calls=output/$@.introns.tsv input/anchor-indel.sam
+	${diff_tsv}
+
+# the documented short options
+testShortOptions: mkout
+	${intron_prospector} ${conf0} -d -m 3 -c output/$@.introns.tsv ${basic_sam}
+	${diff_tsv}
+
+# a file with no SAM header is an error, not a crash
+testNoHeaderError: mkout
+	${intron_prospector} --intron-calls=output/$@.introns.tsv input/no-header.txt > output/$@.err 2>&1 || true
+	${diff} expected/$@.err output/$@.err
+
+##
+# regressions for the defects in notes/code-review-2-defects.org
+##
+defect2Tests: testXsStrandConflict testXsStrandConflictRev testStrandnessCanonFR \
+	testStrandnessCanonRF testBigCoords testLongReadOffset testPaddingCigar \
+	testHalfMappedPairStrand testWriteError
+
+# the splice sites decide the junction's orientation, so two reads whose XS
+# tags disagree give one junction with both reads, whichever comes first
+testXsStrandConflict: mkout ${fake10_fa} ${fake10_fai}
+	${intron_prospector} ${conf0} --genome-fasta=${fake10_fa} --sj-filter=canon \
+	    --intron-calls=output/$@.introns.tsv input/xs-strand-conflict.sam
+	${diff_tsv}
+
+testXsStrandConflictRev: mkout ${fake10_fa} ${fake10_fai}
+	${intron_prospector} ${conf0} --genome-fasta=${fake10_fa} --sj-filter=canon \
+	    --intron-calls=output/$@.introns.tsv input/xs-strand-conflict-rev.sam
+	${diff} expected/testXsStrandConflict.introns.tsv output/$@.introns.tsv
+
+# the canonical filter must keep the same junctions whatever the library
+# strandness says, since the genome, not the read, defines the splice sites
+define strandnessCanonTest
+	${intron_prospector} ${conf0} --genome-fasta=${fake10_fa} \
+	    --intron-calls=output/$@.unstranded.tsv ${fake10_star_sam}
+	${intron_prospector} ${conf0} --genome-fasta=${fake10_fa} --strandness=$(1) \
+	    --intron-calls=output/$@.stranded.tsv ${fake10_star_sam}
+	cut -f1-3 output/$@.unstranded.tsv > output/$@.unstranded.coords
+	cut -f1-3 output/$@.stranded.tsv > output/$@.stranded.coords
+	${diff} output/$@.unstranded.coords output/$@.stranded.coords
+endef
+
+testStrandnessCanonFR: mkout ${fake10_fa} ${fake10_fai}
+	$(call strandnessCanonTest,FR)
+
+testStrandnessCanonRF: mkout ${fake10_fa} ${fake10_fai}
+	$(call strandnessCanonTest,RF)
+
+# coordinates past 2^32 are reported as they are, not wrapped
+testBigCoords: mkout
+	${intron_prospector} ${conf0} --intron-calls=output/$@.introns.tsv input/big-coords.sam
+	${diff_tsv}
+
+# two reads at offsets 70000 and 4464 are two positions, so the junction has a
+# confidence of 1 and survives the default threshold
+testLongReadOffset: mkout
+	${intron_prospector} --intron-calls=output/$@.introns.tsv input/long-read-offset.sam
+	${diff_tsv}
+
+# a padding operation is ignored rather than ending the run
+testPaddingCigar: mkout
+	${intron_prospector} ${conf0} --min-intron-length=50 --intron-calls=output/$@.introns.tsv \
+	    input/padding-cigar.sam
+	${diff_tsv}
+
+# a read whose mate is unmapped has no mate orientation to check against, so
+# its own orientation gives the strand, as for an unpaired read
+testHalfMappedPairStrand: mkout
+	${intron_prospector} ${conf0} --strandness=FR --min-anchor-length=1 \
+	    --min-intron-length=50 --intron-calls=output/$@.introns.tsv input/half-mapped-pair.sam
+	${diff_tsv}
+
+# a failed write is an error, not a silent truncation; /dev/full is Linux only
+testWriteError: mkout
+	if [ -w /dev/full ] ; then \
+	    ${intron_prospector} ${conf0} --intron-calls=/dev/full ${basic_sam} \
+	        > output/$@.err 2>&1 || true ; \
+	    ${diff} expected/$@.err output/$@.err ; \
+	else \
+	    echo "skipped, no /dev/full" ; \
+	fi
 
 
 ###

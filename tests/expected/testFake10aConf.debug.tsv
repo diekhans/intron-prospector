@@ -1,4 +1,4 @@
-chrom	intron_start	intron_end	qname	flag	strand	splice_sites	anchor_start	anchor_end
+chrom	intron_start	intron_end	qname	flag	strand	junc_strand	splice_sites	anchor_start	anchor_end
 fake10	10026	489051	ERR315432.3592307	163	+		GC/AG	10012	489118
 fake10	489118	490086	ERR315432.3592307	163	+		GT/AG	489051	490104
 fake10	34666	35513	ERR315432.801736	147	-		GT/AG	34585	35533

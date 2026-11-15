@@ -1,0 +1,1 @@
+this file holds no SAM, BAM or CRAM header

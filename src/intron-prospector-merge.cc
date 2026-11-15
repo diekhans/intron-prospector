@@ -55,10 +55,17 @@ static void usage() {
     exit(0);
 }
 
-// error and reference to -h
+// command line error, which --help explains
 static void cmd_error(const string& msg) {
     cerr << "Error: "  << msg << endl;
     cerr << "Use --help to get usage" << endl;
+    exit(1);
+}
+
+// failure while running, which is about the data or the files, not the
+// command line, so it does not send the reader to the usage message
+static void runtime_failure(const string& msg) {
+    cerr << "Error: " << msg << endl;
     exit(1);
 }
 
@@ -132,6 +139,7 @@ class CmdParser {
                     break;
                 case 'h':
                     usage();
+                    break;
                 case 'v':
                     cerr << PACKAGE_NAME << " " << PACKAGE_VERSION << " " << PACKAGE_URL << endl;
                     exit(0);
@@ -173,11 +181,11 @@ class CmdParser {
 // current row as Junction
 static Junction read_junction(const Tsv& tsv) {
     // ijunc is ignored
-    uint32_t start = tsv.get_col_int("intron_start");
-    uint32_t end = tsv.get_col_int("intron_end");
+    hts_pos_t start = tsv.get_col_int64("intron_start");
+    hts_pos_t end = tsv.get_col_int64("intron_end");
     Junction junc(tsv.get_col("chrom"), start, end,
-                  start - tsv.get_col_int("max_left_overhang"),
-                  end + tsv.get_col_int("max_right_overhang"),
+                  start - hts_pos_t(tsv.get_col_int64("max_left_overhang")),
+                  end + hts_pos_t(tsv.get_col_int64("max_right_overhang")),
                   tsv.get_col("strand")[0], tsv.get_col("splice_sites"), 0);
     junc.set_read_counts(SINGLE_MAPPED_READ, tsv.get_col_int("uniq_mapped_count"));
     junc.set_read_counts(MULTI_MAPPED_READ, tsv.get_col_int("multi_mapped_count"));
@@ -186,8 +194,7 @@ static Junction read_junction(const Tsv& tsv) {
     return junc;
 }
 
-static void process_junction(JunctionFilter junction_filter,
-                             JunctionTable& junction_tbl,
+static void process_junction(JunctionTable& junction_tbl,
                              const Junction& junc) {
     JunctionKey key(junc.chrom, junc.intron_start, junc.intron_end);
     if (junction_tbl.count(key) == 0) {
@@ -203,13 +210,13 @@ static void process_calls_tsv(JunctionFilter junction_filter,
     Tsv tsv(tsv_file);
     while (tsv.next_row()) {
         if (junction_filter_check(junction_filter, tsv.get_col("splice_sites"))) {
-            process_junction(junction_filter, junction_tbl, read_junction(tsv));
+            process_junction(junction_tbl, read_junction(tsv));
         }
     }
 }
 
 static void renumber_junctions(JunctionVector& juncs) {
-    for (int i = 0; i < juncs.size(); i++) {
+    for (size_t i = 0; i < juncs.size(); i++) {
         juncs[i]->ijunc = i;
     }
 }
@@ -217,7 +224,7 @@ static void renumber_junctions(JunctionVector& juncs) {
 static void intron_prospector_merge(CmdParser &opts) {
     // load and merge
     JunctionTable junction_tbl;
-    for (int i = 0; i < opts.input_calls_tsvs.size(); i++) {
+    for (size_t i = 0; i < opts.input_calls_tsvs.size(); i++) {
         process_calls_tsv(opts.junction_filter, junction_tbl, opts.input_calls_tsvs[i]);
     }
 
@@ -228,21 +235,25 @@ static void intron_prospector_merge(CmdParser &opts) {
     if (opts.junction_bed != "") {
         AutoGzipOutput out(opts.junction_bed);
         print_anchor_bed(juncs, 0.0, opts.min_read_count, out);
+        out.close();
     }
     if ((opts.intron_bed != "") or (opts.intron_bed6 != "") or (opts.intron_call_tsv != "")) {
         juncs.sort_by_introns();
         if (opts.intron_bed != "") {
             AutoGzipOutput out(opts.intron_bed);
             print_intron_bed(juncs, 0.0, opts.min_read_count, 9, out);
+            out.close();
         }
         if (opts.intron_bed6 != "") {
             AutoGzipOutput out(opts.intron_bed6);
             print_intron_bed(juncs, 0.0, opts.min_read_count, 6, out);
+            out.close();
         }
         if (opts.intron_call_tsv != "") {
             AutoGzipOutput out(opts.intron_call_tsv);
             print_junction_call_header(out);
             print_intron_call_tsv(juncs, 0.0, opts.min_read_count, out);
+            out.close();
         }
     }
  }
@@ -253,7 +264,7 @@ int main(int argc, char *argv[]) {
     try {
         intron_prospector_merge(opts);
     } catch (const std::exception& e) {
-        cmd_error(e.what());
+        runtime_failure(e.what());
     }
     return 0;
 }

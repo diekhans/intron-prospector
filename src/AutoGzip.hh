@@ -57,6 +57,24 @@ public:
     bool is_compressed() const { return is_gz_; }
     const std::string& filename() const { return filename_; }
 
+    // Flush and close, raising if any write failed.  A destructor can't
+    // report an error, so a full file system is otherwise silent; this must
+    // be called before the object goes away.
+    void close() {
+        flush();
+        bool failed = bad() or fail();
+        if (is_gz_) {
+            gz_->close();
+            failed = failed or gz_->fail();
+        } else {
+            file_->close();
+            failed = failed or file_->fail();
+        }
+        if (failed) {
+            throw std::ios_base::failure("Error writing file, it is incomplete: " + filename_);
+        }
+    }
+
 private:
     const std::string filename_;
     bool is_gz_;

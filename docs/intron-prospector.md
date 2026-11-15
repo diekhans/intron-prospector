@@ -90,7 +90,7 @@ TSV and BED files will be automatically compressed with `gzip` if they end in `.
 > SAM/BAM files are not sorted.  This will require more memory, as intron counts are
 > not collected per chromosome.
 
-`-X category, --exclude=category`
+`-X category, --excludes=category`
 
 > Exclude reads or introns from this category.  Current categories are:
 > *multi* - excluding multi-mapped reads.

@@ -1,1 +1,1 @@
-intron records have different strand:CM054434.2:4734681-4735936[-/] with CM054434.2:4734681-4735936[+/]
+Warning: intron records disagree on strand, using the strand with the most reads: CM054434.2:4734681-4735936[+/] with CM054434.2:4734681-4735936[-/]

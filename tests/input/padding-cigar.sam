@@ -1,0 +1,4 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:chrA	LN:100000
+padded	0	chrA	100	60	10M2P10M100N10M	*	0	0	*	*	NH:i:1
+ok	0	chrA	101	60	20M100N10M	*	0	0	*	*	NH:i:1

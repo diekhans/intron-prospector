@@ -60,17 +60,31 @@ static void usage() {
     exit(0);
 }
 
-// error and reference to -h
+// command line error, which --help explains
 static void cmd_error(const string& msg) {
     cerr << "Error: "  << msg << endl;
     cerr << "Use --help to get usage" << endl;
     exit(1);
 }
 
+// failure while running, which is about the data or the files, not the
+// command line, so it does not send the reader to the usage message
+static void runtime_failure(const string& msg) {
+    cerr << "Error: " << msg << endl;
+    exit(1);
+}
+
 
 // open a output file if not empty, otherwise return NULL
-static inline ostream* open_out_or_null(const string& fname) {
+static inline AutoGzipOutput* open_out_or_null(const string& fname) {
     return (fname != "") ? new AutoGzipOutput(fname) : NULL;
+}
+
+// flush and close an output, which reports a failed write
+static void close_output(AutoGzipOutput* fh) {
+    if (fh != NULL) {
+        fh->close();
+    }
 }
 
 // convert a specification for strandness to constant.
@@ -135,6 +149,7 @@ class CmdParser {
         min_intron_length(DEFAULT_MIN_INTRON_LENGTH),
         max_intron_length(DEFAULT_MAX_INTRON_LENGTH),
         allow_anchor_indels(DEFAULT_ALLOW_ANCHOR_INDELS),
+        unsorted(false),
         max_anchor_indel_size(DEFAULT_MAX_ANCHOR_INDEL_SIZE),
         min_confidence_score(DEFAULT_MIN_CONFIDENCE_SCORE),
         min_read_count(DEFAULT_MIN_READ_COUNT),
@@ -186,12 +201,12 @@ class CmdParser {
             {NULL, 0, NULL, 0}
         };
             
-        const char *short_options = "hvua:i:I:C:r:s:X:g:Sj:n:b:c:p:D:f:";
+        const char *short_options = "hvudm:a:i:I:C:r:s:X:g:Sj:n:b:c:p:D:f:";
         int c;
         while ((c = getopt_long(argc, argv, short_options, long_options, NULL)) != -1) {
             switch (c) {
                 case 'a':
-                    min_anchor_length = atoi(optarg);
+                    min_anchor_length = toUnsigned(optarg);
                     break;
                 case 'u':
                     unsorted = true;
@@ -255,6 +270,7 @@ class CmdParser {
                     break;
                 case 'h':
                     usage();
+                    break;
                 case 'v':
                     cerr << PACKAGE_NAME << " " << PACKAGE_VERSION << " " << PACKAGE_URL << endl;
                     exit(0);
@@ -275,7 +291,7 @@ class CmdParser {
             bam_files.push_back("/dev/stdin");
         }
         if ((bam_files.size() > 1) and (bam_pass_through != "")) {
-            cmd_error("can only have one input BAM with --bam-pass-through");
+            cmd_error("can only have one input BAM with --pass-through");
         }
     }
 
@@ -311,10 +327,10 @@ class CmdParser {
 class OutputFiles {
     public:
     const string bam_pass_through;
-    ostream* junction_bed_fh;
-    ostream* intron_bed_fh;
-    ostream* intron_bed6_fh;
-    ostream* intron_call_fh;
+    AutoGzipOutput* junction_bed_fh;
+    AutoGzipOutput* intron_bed_fh;
+    AutoGzipOutput* intron_bed6_fh;
+    AutoGzipOutput* intron_call_fh;
 
     OutputFiles(const CmdParser& opts):
         bam_pass_through(opts.bam_pass_through),
@@ -325,6 +341,14 @@ class OutputFiles {
         if (intron_call_fh != NULL) {
             print_junction_call_header(*intron_call_fh);
         }
+    }
+
+    // E3: nothing else checks that the output was written
+    void close() {
+        close_output(junction_bed_fh);
+        close_output(intron_bed_fh);
+        close_output(intron_bed6_fh);
+        close_output(intron_call_fh);
     }
 
     ~OutputFiles() {
@@ -404,7 +428,7 @@ static void extract_junctions_multiple(JunctionsExtractor& extractor,
                                        float min_confidence_score,
                                        uint32_t min_read_count,
                                        OutputFiles& output) {
-    for (int ibam = 0; ibam < bam_files.size(); ibam++) {
+    for (size_t ibam = 0; ibam < bam_files.size(); ibam++) {
         extractor.open(bam_files[ibam]);
         extractor.identify_junctions_for_bam();
         extractor.close();
@@ -417,7 +441,7 @@ static void extract_junctions(CmdParser &opts) {
     if (opts.genome_fa.size() > 0) {
         genome = new Genome(opts.genome_fa);
     }
-    ostream *trace_fh = open_out_or_null(opts.debug_trace_tsv);
+    AutoGzipOutput *trace_fh = open_out_or_null(opts.debug_trace_tsv);
     JunctionsExtractor extractor(opts.min_anchor_length, opts.max_anchor_indel_size,
                                  opts.min_intron_length, opts.max_intron_length,
                                  opts.junction_filter,
@@ -436,6 +460,8 @@ static void extract_junctions(CmdParser &opts) {
         extract_junctions_by_target(extractor, opts.bam_files[0],
                                     opts.min_confidence_score, opts.min_read_count, output);
     }
+    output.close();
+    close_output(trace_fh);
     delete trace_fh;
     delete genome;
  }
@@ -446,7 +472,7 @@ int main(int argc, char *argv[]) {
     try {
         extract_junctions(opts);
     } catch (const std::exception& e) {
-        cmd_error(e.what());
+        runtime_failure(e.what());
     }
     return 0;
 }

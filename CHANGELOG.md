@@ -5,6 +5,51 @@
 * Help text and man page regenerated; --strandness description was attached to
   --unsorted and --set-TS-strand-tag carried a stray copy of the --skip-missing-targets
   text.
+* Fixed --unsorted --pass-through writing a header and no alignments.
+* Fixed junctions being reported on the wrong chromosome when several input files
+  order their headers differently.
+* Fixed crash on an input file with no readable SAM header; it is now an error
+  naming the file.
+* Fixed strand of single-end reads under --strandness, which assumed the paired-end
+  flags.
+* Anchor length no longer counts indels seen before the anchor started, which
+  dropped junctions whose reported overhang passed --min-anchor-length.
+* Fixed -d and -m short options being rejected.
+* Fixed the TSV column count error reporting the expected count as the actual one.
+* Initialized the unsorted flag, which was read uninitialized.
+* The splice sites now decide a junction's orientation: sites that are
+  canonical only reverse complemented set the strand, rather than being
+  reported as non-canonical and dropped by --sj-filter=canon.  A wrong
+  --strandness or XS tag no longer loses junctions.
+* --sj-filter=canon records its decision per junction, so the reads of a
+  rejected junction are no longer counted into a later one and the counts no
+  longer depend on read order.
+* A failed write is now an error rather than a silent truncation, in both
+  programs.
+* Intron coordinates are 64 bit, so positions past 2^32 are no longer wrapped.
+* Read offsets in the confidence score are 32 bit, so offsets past 65535 no
+  longer collide and zero the score of a long read junction.
+* A padding CIGAR operation is ignored rather than ending the run.
+* --debug-trace names its junc_strand column, which the header left out while
+  the rows carried it.
+* The strand of a read whose mate is unmapped or on another target comes from
+  its own orientation, as for an unpaired read, rather than being undetermined.
+* The error for several input BAMs names --pass-through, the option that
+  exists.
+* --min-anchor-length is checked rather than parsed with atoi, where a bad
+  value silently became 0 and turned the anchor test off.
+* A TSV read by intron-prospector-merge may have CRLF line endings; the
+  carriage return is no longer left on the last column.
+* The manual spelled the exclude option --exclude while the program defines
+  --excludes; the manual now matches.
+* The build runs with -Wall -Wextra and is warning free.
+* intron-prospector-merge no longer discards the reads of a record whose
+  strand disagrees with the others, issue 15.  It warns, sums the counts, and
+  takes the strand with the most reads, counted over every merged record so
+  the result does not depend on the order the files are given in.
+* A failure while running, such as an unsorted BAM or a missing genome
+  sequence, is no longer reported as a command line error with a pointer to
+  --help.
 
 ## version 1.5.1 2026-04-22
 * Fixed bug where -S option consumed the next argument

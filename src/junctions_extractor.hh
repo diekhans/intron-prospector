@@ -111,6 +111,9 @@ private:
     // Map to store the junctions by intron coordinates
     JunctionTable junctions_;
 
+    // junctions the splice site filter rejected, so the decision is made once
+    set<JunctionKey> rejected_;
+
     // missing genomic sequence that have been warned about
     set<string> missing_genomic_warned_;
 
@@ -222,6 +225,7 @@ public:
     // free junctions found so far
     void clear() {
         junctions_.clear();
+        rejected_.clear();
     }
     
     // Open a BAM file for process

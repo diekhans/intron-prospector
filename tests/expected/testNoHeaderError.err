@@ -1,0 +1,1 @@
+Error: No SAM/BAM/CRAM header found, check that the file is not empty or truncated: input/no-header.txt

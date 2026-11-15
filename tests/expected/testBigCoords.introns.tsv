@@ -1,0 +1,3 @@
+chrom	intron_start	intron_end	strand	uniq_mapped_count	multi_mapped_count	unsure_mapped_count	max_left_overhang	max_right_overhang	confidence	splice_sites	name
+big	4300000009	4300000109	.	1	0	0	10	10	0		sj0
+big	4300000010	4300000110	.	1	0	0	10	10	0		sj1

@@ -56,7 +56,7 @@ float Junction::calculate_confidence() {
     std::sort(read_offsets.begin(), read_offsets.end());
     float summation = 0.0;
     for (unsigned i = 0; i < read_offsets.size(); ) {
-        uint16_t pos = read_offsets[i];
+        uint32_t pos = read_offsets[i];
         unsigned cnt = 0;
         for (; (i < read_offsets.size()) && (read_offsets[i] == pos); i++) {
             cnt++;
@@ -73,22 +73,29 @@ string Junction::get_description() const {
     return mk_coords_str(chrom, intron_start, intron_end) + "[" + strand + "/" + splice_sites + "]";
 }
 
+// do the two records name different strands?  A record with no strand, '.',
+// disagrees with nothing.
+static bool strands_conflict(const Junction& j1, const Junction& j2) {
+    return (j1.strand != '.') and (j2.strand != '.') and (j1.strand != j2.strand);
+}
+
+// Settle a strand disagreement on the summed read counts of the two strands,
+// taking the other record's strand and splice sites when that strand has more
+// reads.  An exact tie keeps the strand already held.
+void Junction::vote_strand(const Junction& j1) {
+    cerr << "Warning: intron records disagree on strand, using the strand with the most reads: "
+         << get_description() << " with " << j1.get_description() << endl;
+    if (get_strand_votes(j1.strand) > get_strand_votes(strand)) {
+        take_strand(j1);
+    }
+}
+
 void Junction::merge(const Junction& j1) {
     if ((j1.chrom != chrom) || (j1.intron_start != intron_start) || (j1.intron_end != intron_end)) {
         throw logic_error("attempt to merge different introns:" + j1.get_description() + " with " + get_description());
     }
-    // if one doesn't have strand ('.') and the other does, update to use the specified strand and splice site.
-    bool updateStrand = false;
-
-    if ((j1.strand != '.') and (strand == '.')) {
-        updateStrand = true;
-    } else if ((j1.strand == '.') and (strand != '.')) {
-        // leave as-is
-    } else if (j1.strand != strand) {
-        // FIXME:  #15 temporary hack until we figure out how to vote
-        cerr << "intron records have different strand:" + j1.get_description() + " with " + get_description() << endl;
-        return;
-    } else if (j1.splice_sites != splice_sites) {
+    bool conflict = strands_conflict(*this, j1);
+    if ((j1.strand == strand) and (j1.splice_sites != splice_sites)) {
         throw runtime_error("intron records have different splice sites:" + j1.get_description() + " with " + get_description());
     }
     anchor_start = min(j1.anchor_start, anchor_start);
@@ -96,11 +103,14 @@ void Junction::merge(const Junction& j1) {
     read_counts[SINGLE_MAPPED_READ] += j1.read_counts[SINGLE_MAPPED_READ];
     read_counts[MULTI_MAPPED_READ] += j1.read_counts[MULTI_MAPPED_READ];
     read_counts[UNSURE_READ] += j1.read_counts[UNSURE_READ];
+    strand_votes[0] += j1.strand_votes[0];
+    strand_votes[1] += j1.strand_votes[1];
     confidence = max(j1.confidence, confidence);
     // keep original ijunc
-    if (updateStrand) {
-        strand = j1.strand;
-        splice_sites = j1.splice_sites;
+    if (conflict) {
+        vote_strand(j1);
+    } else if ((j1.strand != '.') and (strand == '.')) {
+        take_strand(j1);
     }
 }
 

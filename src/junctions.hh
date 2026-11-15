@@ -57,12 +57,12 @@ static const unsigned READ_CATEGORY_MAX = UNSURE_READ;
 class JunctionKey {
     public:
     const string chrom;
-    const uint32_t intron_start;
-    const uint32_t intron_end;
+    const hts_pos_t intron_start;
+    const hts_pos_t intron_end;
 
     JunctionKey(const string& chrom,
-                uint32_t intron_start,
-                uint32_t intron_end):
+                hts_pos_t intron_start,
+                hts_pos_t intron_end):
         chrom(chrom), intron_start(intron_start), intron_end(intron_end) {
     }
 
@@ -105,10 +105,10 @@ public:
     static float NULL_CONFIDENCE;
     
     const string chrom;
-    uint32_t intron_start;
-    uint32_t intron_end;
-    uint32_t anchor_start;  // This is the intron_start - max overhang
-    uint32_t anchor_end;    // This is the end + max overhang
+    hts_pos_t intron_start;
+    hts_pos_t intron_end;
+    hts_pos_t anchor_start;  // This is the intron_start - max overhang
+    hts_pos_t anchor_end;    // This is the end + max overhang
     char strand;
     string splice_sites;    // splite sites in the form GT/AG if genome available
     uint32_t ijunc;         // used for generate BED names
@@ -116,17 +116,24 @@ public:
     private:
     // Number of reads supporting the junction, by category
     uint64_t read_counts[READ_CATEGORY_MAX + 1];
-    // For each read, the distance from the start of the read to the start of the intron.
-    // Uses in calculating Shannon-Wiener Diversity Index
-    std::vector<uint16_t> read_offsets;
+    // Reads seen for each strand, 0 for '+' and 1 for '-', summed over every
+    // record merged into this one.  Merging records that disagree on strand
+    // settles on the strand with the most reads, and keeping the votes here
+    // rather than comparing the two records makes that independent of the
+    // order the records are merged in.
+    uint64_t strand_votes[2];
+    // For each read, the distance from the start of the read to the start of
+    // the intron, used in calculating the Shannon-Wiener Diversity Index.  It
+    // is a distance within one alignment, so 32 bits is always enough.
+    std::vector<uint32_t> read_offsets;
     float confidence;   // computed in a lazy manner
 
     void lazy_get_confidence();
     float calculate_confidence();
     
     public:
-    Junction(const string& chrom1, uint32_t intron_start1, uint32_t intron_end1,
-             uint32_t anchor_start1, uint32_t anchor_end1,
+    Junction(const string& chrom1, hts_pos_t intron_start1, hts_pos_t intron_end1,
+             hts_pos_t anchor_start1, hts_pos_t anchor_end1,
              char strand1, const string& splice_sites, uint32_t ijunc):
         chrom(chrom1), intron_start(intron_start1), intron_end(intron_end1),
         anchor_start(anchor_start1), anchor_end(anchor_end1),
@@ -135,6 +142,7 @@ public:
         for (unsigned i = 0; i <= READ_CATEGORY_MAX; i++) {
             read_counts[i] = 0;
         }
+        strand_votes[0] = strand_votes[1] = 0;
     }
     Junction(const Junction& src):
         chrom(src.chrom), intron_start(src.intron_start), intron_end(src.intron_end),
@@ -144,13 +152,33 @@ public:
         for (unsigned i = 0; i <= READ_CATEGORY_MAX; i++) {
             read_counts[i] = src.read_counts[i];
         }
+        strand_votes[0] = src.strand_votes[0];
+        strand_votes[1] = src.strand_votes[1];
     }
 
     string get_description() const;
     
+    // vote index of a strand, or -1 when the record names no strand
+    static int strand_vote_index(char vote_strand) {
+        if (vote_strand == '+') {
+            return 0;
+        }
+        return (vote_strand == '-') ? 1 : -1;
+    }
+
+    // votes this record casts for its own strand
+    void recount_strand_votes() {
+        strand_votes[0] = strand_votes[1] = 0;
+        int index = strand_vote_index(strand);
+        if (index >= 0) {
+            strand_votes[index] = total_read_count();
+        }
+    }
+
     void set_read_counts(ReadCategory read_category,
                          uint32_t count) {
         read_counts[read_category] = count;
+        recount_strand_votes();
     }
 
     void set_confidence(float confidence1) {
@@ -158,12 +186,31 @@ public:
     }
 
     void merge(const Junction& j1);
+
+    // settle a strand disagreement on the read counts, with a warning
+    void vote_strand(const Junction& j1);
+
+    // strand and splice sites of another record
+    void take_strand(const Junction& j1) {
+        strand = j1.strand;
+        splice_sites = j1.splice_sites;
+    }
+
+    // votes for each strand, after the two records' counts are summed
+    uint64_t get_strand_votes(char vote_strand) const {
+        int index = strand_vote_index(vote_strand);
+        return (index < 0) ? 0 : strand_votes[index];
+    }
     
     // add a read to the counts and offsets
     void count_read(ReadCategory read_category,
-                    uint32_t read_offset) {
+                    hts_pos_t read_offset) {
         read_counts[read_category] += 1;
-        read_offsets.push_back(read_offset);
+        read_offsets.push_back(uint32_t(read_offset));
+        int index = strand_vote_index(strand);
+        if (index >= 0) {
+            strand_votes[index] += 1;
+        }
     }
 
     // sum different read counts

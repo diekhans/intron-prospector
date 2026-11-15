@@ -34,9 +34,9 @@ string dna_reverse_complement(const string& dna) {
     }
     string rcDna;
     rcDna.resize(dna.size());
-    int j = dna.size() - 1;
-    for (int i = 0; i < dna.size(); i++) {
-        rcDna[j--] = reverse_tbl[int(dna[i])];
+    size_t j = dna.size();
+    for (size_t i = 0; i < dna.size(); i++) {
+        rcDna[--j] = reverse_tbl[(unsigned char)dna[i]];
     }
     return rcDna;
 }
@@ -59,13 +59,14 @@ bool Genome::has_seq(const string &chrom) const {
     return faidx_has_seq(faidx, chrom.c_str());
 }
 
-const string Genome::fetch(const string &chrom, int start, int end) const {
-    int retlen = 0;
-    char *seq = faidx_fetch_seq(faidx, chrom.c_str(), start, end - 1, &retlen);
+const string Genome::fetch(const string &chrom, hts_pos_t start, hts_pos_t end) const {
+    hts_pos_t retlen = 0;
+    char *seq = faidx_fetch_seq64(faidx, chrom.c_str(), start, end - 1, &retlen);
     if (seq == NULL) {
         throw runtime_error("can't load genome sequence for: " + mk_coords_str(chrom, start, end));
     }
     if (retlen != (end - start)) {
+        free(seq);
         throw runtime_error("unexpected length returned for: "  + mk_coords_str(chrom, start, end) + ": " + int_to_string(retlen));
     }
     string sseq(seq);
