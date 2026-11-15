@@ -48,3 +48,6 @@ bin/
 src/version.hh
 aclocal.m4
 
+# tmp directories for development
+/notes/
+/work/
