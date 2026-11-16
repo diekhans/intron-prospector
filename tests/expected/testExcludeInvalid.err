@@ -1,1 +1,1 @@
-Error: invalid exclude category 'bogus', expected one of: 'multi'
+Error parsing command line: invalid alignment category 'bogus', expected one of: qcfail, dup, secondary, supplementary, multimapping

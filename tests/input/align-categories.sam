@@ -1,0 +1,8 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:chrA	LN:10000
+plain	0	chrA	100	60	20M100N20M	*	0	0	*	*	NH:i:1
+qcfail	512	chrA	200	60	20M100N20M	*	0	0	*	*	NH:i:1
+dup	1024	chrA	300	60	20M100N20M	*	0	0	*	*	NH:i:1
+secondary	256	chrA	400	60	20M100N20M	*	0	0	*	*	NH:i:3
+supplementary	2048	chrA	500	60	20M100N20M	*	0	0	*	*	NH:i:1
+multi	0	chrA	600	60	20M100N20M	*	0	0	*	*	NH:i:4

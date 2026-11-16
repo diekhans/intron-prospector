@@ -98,6 +98,14 @@ AC_SUBST([CPPFLAGS])
 AC_SUBST([LDFLAGS])
 AC_SUBST([LIBS])
    
+# a build from the git tree is not a release; report the last release and the
+# development line it is based on, such as 1.5.1+main
+AS_IF([test -e "${srcdir}/.git"],
+      [PACKAGE_VERSION="${PACKAGE_VERSION}+main"
+       VERSION="${PACKAGE_VERSION}"
+       PACKAGE_STRING="${PACKAGE_NAME} ${PACKAGE_VERSION}"
+       AC_MSG_NOTICE([building from a git tree, version is ${PACKAGE_VERSION}])])
+
 AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile src/version.hh man/Makefile])
 
 AC_OUTPUT

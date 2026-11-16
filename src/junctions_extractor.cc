@@ -70,8 +70,8 @@ static ReadCategory get_category_from_tag(bam1_t *aln) {
 // Determine the category of read.  Logic from samtools flagstat
 static ReadCategory get_read_category(bam1_t *aln) {
     unsigned flag = aln->core.flag;
-    if (flag & (BAM_FQCFAIL | BAM_FUNMAP | BAM_FDUP)) {
-        throw logic_error("should never look at FQCAIL, FUNMAP, FDUP reads");
+    if (flag & BAM_FUNMAP) {
+        throw logic_error("should never look at an unmapped read");
     } else if (flag & BAM_FSECONDARY) {
         return MULTI_MAPPED_READ;  // secondary alignment
     } else if (flag & BAM_FSUPPLEMENTARY ) {
@@ -320,6 +320,68 @@ class ReadJunctionExtractor {
     }
 };
 
+// name to SAM flag, in the order the help lists them
+typedef struct {
+    const char *name;
+    unsigned flag;
+} AlignCategory;
+
+static const AlignCategory ALIGN_CATEGORIES[] = {
+    {"qcfail", BAM_FQCFAIL},
+    {"dup", BAM_FDUP},
+    {"secondary", BAM_FSECONDARY},
+    {"supplementary", BAM_FSUPPLEMENTARY},
+    {"multimapping", ALIGN_CAT_MULTIMAPPING},
+    {NULL, 0}
+};
+
+string align_categories_help() {
+    string names;
+    for (int i = 0; ALIGN_CATEGORIES[i].name != NULL; i++) {
+        names += (i == 0) ? "" : ", ";
+        names += ALIGN_CATEGORIES[i].name;
+    }
+    return names;
+}
+
+string align_categories_to_string(unsigned cats) {
+    string names;
+    for (int i = 0; ALIGN_CATEGORIES[i].name != NULL; i++) {
+        if ((cats & ALIGN_CATEGORIES[i].flag) != 0) {
+            names += (names.size() == 0) ? "" : ",";
+            names += ALIGN_CATEGORIES[i].name;
+        }
+    }
+    return names;
+}
+
+// one category name to its SAM flag
+static unsigned align_category_parse(const string& name) {
+    for (int i = 0; ALIGN_CATEGORIES[i].name != NULL; i++) {
+        if (name == ALIGN_CATEGORIES[i].name) {
+            return ALIGN_CATEGORIES[i].flag;
+        }
+    }
+    if (name == "multi") {
+        throw invalid_argument("the category of multi-mapped reads is now called "
+                               "'multimapping'; use --exclude=multimapping");
+    }
+    throw invalid_argument("invalid alignment category '" + name + "', expected one of: "
+                           + align_categories_help());
+}
+
+unsigned align_categories_parse(const string& spec) {
+    unsigned cats = ALIGN_CATS_NONE;
+    size_t start = 0;
+    while (start <= spec.size()) {
+        size_t end = spec.find(',', start);
+        end = (end == string::npos) ? spec.size() : end;
+        cats |= align_category_parse(spec.substr(start, end - start));
+        start = end + 1;
+    }
+    return cats;
+}
+
 // Get the strand from the XS aux tag
 char JunctionsExtractor::get_junction_strand_XS(bam1_t *aln) {
     uint8_t *p = bam_aux_get(aln, "XS");
@@ -356,7 +418,7 @@ static bool mate_is_usable(bam1_t *aln) {
 char JunctionsExtractor::get_junction_strand_flag(bam1_t *aln) {
     uint32_t flag = (aln->core).flag;
     bool paired = (flag & BAM_FPAIRED) != 0;
-    // an unpaired read, such as a long read, carries neither mate flag; its
+    // an unpaired read, such as a long read, has neither mate flag; its
     // orientation is the sense a first mate's would be
     int first_in_pair = paired ? ((flag & BAM_FREAD1) != 0) : 1;
     int first_strand = mate_strand(strandness_, first_in_pair, bam_is_rev(aln));
@@ -396,16 +458,13 @@ JunctionsExtractor::~JunctionsExtractor() {
 }
 
 
-// Do some basic qc on the junction, filter as needed
-bool JunctionsExtractor::junction_qc(bam1_t *aln, hts_pos_t anchor_start, hts_pos_t intron_start,
+// Do some basic qc on the junction, filter as needed.  Which alignments are
+// read is decided in process_alignment, so this is only about the junction.
+bool JunctionsExtractor::junction_qc(hts_pos_t anchor_start, hts_pos_t intron_start,
                                      hts_pos_t intron_end, hts_pos_t anchor_end,
                                      uint32_t left_mismatch_cnt, uint32_t right_mismatch_cnt,
                                      uint32_t left_indel_cnt, uint32_t right_indel_cnt) {
-    if ((aln->core).flag & BAM_FSECONDARY) {
-        return false;  // secondary alignment
-    } else if (((excludes_ & EXCLUDE_MULTI) != 0) && (get_num_aligns(aln) > 1)) {
-        return false;  // multiple-mapping
-    } else if ((intron_end - intron_start < min_intron_length_) ||
+    if ((intron_end - intron_start < min_intron_length_) ||
                (intron_end - intron_start > max_intron_length_)) {
         return false; // too short or long
     } else if ((((intron_start - anchor_start) - (left_mismatch_cnt + left_indel_cnt)) < min_anchor_length_) ||
@@ -549,7 +608,7 @@ void JunctionsExtractor::record_junction(bam1_t *aln, const string& chrom, char 
     assert((anchor_start < intron_start) && (intron_end < anchor_end));
 
     // check for canonical is delayed to avoid multiple genome fasta queries
-    if (junction_qc(aln, anchor_start, intron_start, intron_end, anchor_end,
+    if (junction_qc(anchor_start, intron_start, intron_end, anchor_end,
                     left_mismatch_cnt, right_mismatch_cnt,
                     left_indel_cnt, right_indel_cnt)) {
         Junction *junc = add_junction(aln, chrom, strand, anchor_start, intron_start, intron_end, anchor_end);
@@ -561,10 +620,11 @@ void JunctionsExtractor::record_junction(bam1_t *aln, const string& chrom, char 
 
 // Process an alignment
 void JunctionsExtractor::process_alignment(bam1_t *aln) {
-    // skip if unmapped, only one cigar operation exists (likely all matches),
-    // low-quality or duplicate
+    // skip if unmapped, if only one cigar operation exists (likely all
+    // matches), or if the alignment is in an excluded category
     if (!((aln->core.n_cigar <= 1) || (aln->core.tid < 0)
-          || (aln->core.flag & (BAM_FUNMAP | BAM_FQCFAIL | BAM_FDUP)))) {
+          || (aln->core.flag & (BAM_FUNMAP | exclude_flags_))
+          || (exclude_multimapping_ && (get_num_aligns(aln) > 1)))) {
         int orientCnt = 0;
         ReadJunctionExtractor readJuncExtract(aln, targets_[aln->core.tid], this, max_anchor_indel_size_);
         readJuncExtract.parse_read(&orientCnt);

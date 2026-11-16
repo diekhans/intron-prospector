@@ -4,32 +4,57 @@ Notes:
 * The configure script is kept current it git, which allows builds from github
   generated release download archives.
 
-## Making a release:
-- update CHANGELOG.md
-- update version in configure.ac
-- autoreconf -fi
-- ./configure
-- make doc
-  this builds help and manual pages from markdown
-- test:
-  - make distclean
-  - ./configure --prefix=/some/test/dir
-  - make -j 32
-  - make -j 32 test
-  - make install
-- git commit -am '1.x.x release'
-- git tag v1.x.x
-- git push
-- git push --tags
-- github draft a release with CHANGELOG text as description
-- BioConda
-  - first time or dependencies changes
-    in fork of https://github.com/bioconda/bioconda-recipes
-    update the version and sha256 in
-       bioconda-recipes/recipes/intron-prospector/meta.yaml
-    make a pull request to bioconda/bioconda-recipes
-  - wait for and  automatic pull request to be generate
-    Once the tests have passed, add this comment to the pull request:
-	    @BiocondaBot please add label
-    This should take care of the red 'Review Required' and 'Merging is Blocked' notifications
+## Making a release
 
+### Version numbering
+- `AC_INIT` in `configure.ac` holds the version of the last release.
+- A build from a git tree reports that version with `+main` appended, such as
+  `1.5.1+main`, so a development build is never mistaken for a release.
+- A build from a release archive has no `.git`, so it reports the version
+  itself.
+- `configure` is checked in, so GitHub release archives build without
+  autoconf.
+
+### Before tagging
+- Update `CHANGELOG.md`: retitle the `next release` section to the version and
+  the date, newest section first.
+- Set the version in `AC_INIT` in `configure.ac`.
+- `autoreconf -fi`
+- `./configure`
+- `make doc`, which needs pandoc.  It regenerates `src/*.man.h` from
+  `docs/*.md` and the man pages in `man/`.
+- `git add` the regenerated `configure`, `src/*.man.h` and `man/*.1`.
+
+### Test
+- `make distclean`
+- `./configure --prefix=/some/test/dir`
+- `make -j 32`
+- `make -j 32 test`
+- `make install`
+- Run the installed `intron-prospector --version` and check that it reports
+  the release version with no `+main`.
+
+### Tag and publish
+- `git commit -am 'v1.x.x release'`
+- `git tag v1.x.x`
+- `git push`
+- `git push --tags`
+- On GitHub, draft a release from the tag with the CHANGELOG section for that
+  version as the description.
+
+### BioConda
+- The GitHub release triggers an automatic version bump pull request against
+  bioconda/bioconda-recipes.
+- When its tests pass, comment on that pull request:
+  `@BiocondaBot please add label`.  This clears the `Review Required` and
+  `Merging is Blocked` notifications.
+- Update the recipe by hand only the first time, or when the dependencies or
+  the build change:
+  - Fork https://github.com/bioconda/bioconda-recipes.
+  - Set `version` and `sha256` in
+    `recipes/intron-prospector/meta.yaml`.
+  - The checksum is of the release archive:
+    `curl -sL https://github.com/diekhans/intron-prospector/archive/refs/tags/v1.x.x.tar.gz | sha256sum`
+  - Open a pull request against bioconda/bioconda-recipes.
+- Install from the built package to check it:
+  `conda create -n ip-test -c conda-forge -c bioconda intron-prospector`

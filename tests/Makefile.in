@@ -55,7 +55,8 @@ test: intron_prospectorTests intron_prospector_mergeTests
 # intron_prospector tests
 #####
 intron_prospectorTests: basicTests minReadCountTests multiTests fake10Tests regressTests ontTests multiBamTests \
-	sjfilterTests strandTagTests parityTests errorTests defectTests defect2Tests
+	sjfilterTests strandTagTests parityTests errorTests defectTests defect2Tests \
+	categoryTests
 
 ###
 # basic tests
@@ -94,7 +95,7 @@ testBasic4: mkout ${basic_bam}
 
 # test exclude multi filter
 testBasic5: mkout ${basic_bam}
-	${intron_prospector} --exclude=multi ${conf0} --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv ${basic_bam}
+	${intron_prospector} --exclude=multimapping ${conf0} --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv ${basic_bam}
 	${diff_out}
 
 ##
@@ -400,9 +401,9 @@ testStrandnessInvalid: mkout
 	${intron_prospector} --strandness=XX ${basic_sam} > output/$@.err 2>&1 || true
 	${diff} expected/$@.err output/$@.err
 
-# invalid --excludes category
+# invalid --exclude category
 testExcludeInvalid: mkout
-	${intron_prospector} --excludes=bogus ${basic_sam} > output/$@.err 2>&1 || true
+	${intron_prospector} --exclude=bogus ${basic_sam} > output/$@.err 2>&1 || true
 	${diff} expected/$@.err output/$@.err
 
 # invalid --sj-filter value
@@ -457,7 +458,7 @@ testTargetOrderMultiSam: mkout
 	${intron_prospector} ${small} --intron-calls=output/$@.introns.tsv input/target-order-a.sam input/target-order-b.sam
 	${diff_tsv}
 
-# an unpaired read carries neither mate flag, so its strand comes from its
+# an unpaired read has neither mate flag, so its strand comes from its
 # orientation and the library alone
 testSingleEndStrandFR: mkout
 	${intron_prospector} ${small} --strandness=FR --intron-calls=output/$@.introns.tsv input/single-end-strand.sam
@@ -553,6 +554,71 @@ testWriteError: mkout
 	else \
 	    echo "skipped, no /dev/full" ; \
 	fi
+
+
+##
+# --include and --exclude.  One read per category in
+# input/align-categories.sam, each with its own junction.
+##
+categoryTests: testCategoryDefault testCategoryIncludeQcfail testCategoryIncludeAll \
+	testCategoryExcludeSupplementary testCategoryExcludeMultimapping \
+	testCategoryExcludeMultimappingAndSupplementary testCategoryExcludeRepeated \
+	testCategoryMultiNotACategory testCategoryBothIncludeExclude \
+	testCategoryExcludesDeprecated
+
+cats_sam = input/align-categories.sam
+
+# qcfail, dup and secondary are skipped, supplementary and a high NH are used
+testCategoryDefault: mkout
+	${intron_prospector} ${conf0} --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+testCategoryIncludeQcfail: mkout
+	${intron_prospector} ${conf0} --include=qcfail --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+testCategoryIncludeAll: mkout
+	${intron_prospector} ${conf0} --include=qcfail,dup,secondary \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+testCategoryExcludeSupplementary: mkout
+	${intron_prospector} ${conf0} --exclude=supplementary \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+# the NH tag, not a flag, so the supplementary read with NH 1 is still used
+testCategoryExcludeMultimapping: mkout
+	${intron_prospector} ${conf0} --exclude=multimapping \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+# multimapping and a flag category compose: the two tests remove different things
+testCategoryExcludeMultimappingAndSupplementary: mkout
+	${intron_prospector} ${conf0} --exclude=multimapping,supplementary \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff_tsv}
+
+# the option may be repeated instead of taking a list
+testCategoryExcludeRepeated: mkout
+	${intron_prospector} ${conf0} --exclude=multimapping --exclude=supplementary \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam}
+	${diff} expected/testCategoryExcludeMultimappingAndSupplementary.introns.tsv output/$@.introns.tsv
+
+testCategoryMultiNotACategory: mkout
+	${intron_prospector} --exclude=multi ${cats_sam} > output/$@.err 2>&1 || true
+	${diff} expected/$@.err output/$@.err
+
+testCategoryBothIncludeExclude: mkout
+	${intron_prospector} --include=dup --exclude=dup ${cats_sam} > output/$@.err 2>&1 || true
+	${diff} expected/$@.err output/$@.err
+
+# --excludes is the deprecated name of --exclude; it warns and still works
+testCategoryExcludesDeprecated: mkout
+	${intron_prospector} ${conf0} --excludes=multimapping \
+	    --intron-calls=output/$@.introns.tsv ${cats_sam} 2> output/$@.err
+	${diff} expected/testCategoryExcludeMultimapping.introns.tsv output/$@.introns.tsv
+	${diff} expected/$@.err output/$@.err
 
 
 ###

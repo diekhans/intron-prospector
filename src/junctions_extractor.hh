@@ -60,11 +60,38 @@ typedef enum {
 } Strandness;
 
 
-// categories to exclude
-typedef enum {
-    EXCLUDE_NONE = 0x00,
-    EXCLUDE_MULTI = 0x01,
-} ExcludeCats;
+/* Categories of alignment that --include and --exclude name, as a mask.
+ *
+ * Four of them are SAM flags, so those bits of the mask are the flag bits and
+ * are tested against the alignment's flags.  The fifth, multimapping, is read from
+ * the NH tag rather than from a flag and uses a bit of its own, above any SAM
+ * flag.  It also removes a different thing: secondary drops one alignment
+ * record of a read that aligns in several places, leaving its primary
+ * alignment, while multimapping drops every alignment of such a read.
+ *
+ * An unmapped alignment is not a category.  It has no junctions and is always
+ * skipped.
+ */
+static const unsigned ALIGN_CATS_NONE = 0;
+
+// not a SAM flag; the NH tag says how many places the read aligns
+static const unsigned ALIGN_CAT_MULTIMAPPING = 0x10000;
+
+// the categories that are SAM flags, so can be tested against aln->core.flag
+static const unsigned ALIGN_CATS_FLAGS = BAM_FQCFAIL | BAM_FDUP | BAM_FSECONDARY | BAM_FSUPPLEMENTARY;
+
+// excluded unless --include names them; supplementary alignments and
+// multi-mapped reads are used
+static const unsigned ALIGN_CATS_EXCLUDED_DEFAULT = BAM_FQCFAIL | BAM_FDUP | BAM_FSECONDARY;
+
+// parse a comma separated category list into a mask of SAM flags
+unsigned align_categories_parse(const string& spec);
+
+// category names of a mask, comma separated, for messages
+string align_categories_to_string(unsigned cats);
+
+// the category names, for help and error messages
+string align_categories_help();
 
 
 // The class that deals with creating the junctions.
@@ -93,8 +120,11 @@ private:
     //strandness of data; 0 = unstranded, 1 = RF, 2 = FR
     Strandness strandness_;
 
-    // exclude categories
-    unsigned excludes_;
+    // SAM flags of the alignment categories to skip
+    unsigned exclude_flags_;
+
+    // skip reads the NH tag says align in more than one place
+    bool exclude_multimapping_;
     
     // Alignment file
     string bam_;
@@ -141,7 +171,7 @@ private:
     
     // internal functions
     void save_targets(bam_hdr_t *header);
-    bool junction_qc(bam1_t *aln, hts_pos_t anchor_start, hts_pos_t intron_start,
+    bool junction_qc(hts_pos_t anchor_start, hts_pos_t intron_start,
                      hts_pos_t intron_end, hts_pos_t anchor_end,
                      uint32_t left_mismatch_cnt, uint32_t right_mismatch_cnt,
                      uint32_t left_indel_cnt, uint32_t right_indel_cnt);
@@ -182,7 +212,7 @@ public:
                        uint32_t max_intron_length,
                        JunctionFilter junction_filter,
                        Strandness strandness,
-                       unsigned excludes,
+                       unsigned exclude_cats,
                        Genome *genome,
                        bool skip_missing_targets,
                        bool set_XS_strand_tag,
@@ -194,7 +224,8 @@ public:
         max_intron_length_(max_intron_length),
         junction_filter_(junction_filter),
         strandness_(strandness),
-        excludes_(excludes),
+        exclude_flags_(exclude_cats & ALIGN_CATS_FLAGS),
+        exclude_multimapping_((exclude_cats & ALIGN_CAT_MULTIMAPPING) != 0),
         genome_(genome),
         skip_missing_targets_(skip_missing_targets),
         set_XS_strand_tag_(set_XS_strand_tag),

@@ -1,0 +1,1 @@
+Error parsing command line: the category of multi-mapped reads is now called 'multimapping'; use --exclude=multimapping

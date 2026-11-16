@@ -105,16 +105,6 @@ static Strandness str_to_strandness(const string s) {
     }
 }
 
-// parse an exclude category
-static unsigned parse_exclude_cat(const string &cat) {
-    if (cat == "multi") {
-        return EXCLUDE_MULTI;
-    } else {
-        cerr << "Error: invalid exclude category '" << cat << "', expected one of: 'multi'" << endl;
-        exit(1);
-    }
-}
-
 // Parse command line
 class CmdParser {
     public:
@@ -130,7 +120,8 @@ class CmdParser {
     uint32_t min_read_count;
     JunctionFilter junction_filter;
     Strandness strandness;
-    unsigned excludes;
+    unsigned includes;   // categories to use that are excluded by default
+    unsigned excludes;   // categories to skip that are used by default
     string genome_fa;
     bool skip_missing_targets;
 
@@ -144,6 +135,12 @@ class CmdParser {
     bool set_XS_strand_tag;
     bool set_TS_strand_tag;
 
+    // categories to skip: the default set, less what --include allows, plus
+    // what --exclude disallows
+    unsigned exclude_cats() const {
+        return (ALIGN_CATS_EXCLUDED_DEFAULT & ~includes) | excludes;
+    }
+
     CmdParser(int argc, char *argv[]):
         min_anchor_length(DEFAULT_MIN_ANCHOR_LENGTH),
         min_intron_length(DEFAULT_MIN_INTRON_LENGTH),
@@ -155,7 +152,8 @@ class CmdParser {
         min_read_count(DEFAULT_MIN_READ_COUNT),
         junction_filter(NULL_SJ_FILTER),
         strandness(DEFAULT_STRANDED),
-        excludes(EXCLUDE_NONE),
+        includes(ALIGN_CATS_NONE),
+        excludes(ALIGN_CATS_NONE),
         skip_missing_targets(false),
         set_XS_strand_tag(false),
         set_TS_strand_tag(false) {
@@ -173,6 +171,9 @@ class CmdParser {
         // definitions for long-only options
         static const int OPT_SET_XS_STRAND_TAG = 256;
         static const int OPT_SET_TS_STRAND_TAG = 257;
+        static const int OPT_INCLUDE = 258;
+        // deprecated name of --exclude, used through release 1.5.1
+        static const int OPT_EXCLUDES = 259;
         
         struct option long_options[] = {
             {"help", no_argument, NULL, 'h'},
@@ -186,7 +187,9 @@ class CmdParser {
             {"min-confidence-score", required_argument, NULL, 'C'},
             {"min-read-count", required_argument, NULL, 'r'},
             {"strandness", required_argument, NULL, 's'},
-            {"excludes", required_argument, NULL, 'X'},
+            {"exclude", required_argument, NULL, 'X'},
+            {"include", required_argument, NULL, OPT_INCLUDE},
+            {"excludes", required_argument, NULL, OPT_EXCLUDES},
             {"genome-fasta", required_argument, NULL, 'g'},
             {"sj-filter", required_argument, NULL, 'f'},
             {"skip-missing-targets", no_argument, NULL, 'S'},
@@ -233,7 +236,14 @@ class CmdParser {
                     strandness = str_to_strandness(optarg);
                     break;
                 case 'X':
-                    excludes |= parse_exclude_cat(optarg);
+                    excludes |= align_categories_parse(optarg);
+                    break;
+                case OPT_INCLUDE:
+                    includes |= align_categories_parse(optarg);
+                    break;
+                case OPT_EXCLUDES:
+                    cerr << "Warning: --excludes is deprecated, use --exclude" << endl;
+                    excludes |= align_categories_parse(optarg);
                     break;
                 case 'g':
                     genome_fa = string(optarg);
@@ -295,6 +305,14 @@ class CmdParser {
         }
     }
 
+    void check_categories() {
+        unsigned both = includes & excludes;
+        if (both != ALIGN_CATS_NONE) {
+            cmd_error("category named by both --include and --exclude: "
+                      + align_categories_to_string(both));
+        }
+    }
+
     void setup_junction_filter() {
         if ((junction_filter == CANON_SJ_FILTER) and (genome_fa == "")) {
             cmd_error("--sj-filter=canon requires --genome_fa");
@@ -308,6 +326,7 @@ class CmdParser {
     void parse_cmd_args(int argc, char *argv[]) {
         int nextopt = parse_options(argc, argv);
         collect_bams(argc, argv, nextopt);
+        check_categories();
         setup_junction_filter();
         
         // if indels are not allowed, also indicate this by setting max size
@@ -445,7 +464,7 @@ static void extract_junctions(CmdParser &opts) {
     JunctionsExtractor extractor(opts.min_anchor_length, opts.max_anchor_indel_size,
                                  opts.min_intron_length, opts.max_intron_length,
                                  opts.junction_filter,
-                                 opts.strandness, opts.excludes, genome,
+                                 opts.strandness, opts.exclude_cats(), genome,
                                  opts.skip_missing_targets,
                                  opts.set_XS_strand_tag, opts.set_TS_strand_tag,
                                  trace_fh);

@@ -90,10 +90,35 @@ TSV and BED files will be automatically compressed with `gzip` if they end in `.
 > SAM/BAM files are not sorted.  This will require more memory, as intron counts are
 > not collected per chromosome.
 
-`-X category, --excludes=category`
+`-X categories, --exclude=categories`
 
-> Exclude reads or introns from this category.  Current categories are:
-> *multi* - excluding multi-mapped reads.
+> Skip alignments in these categories, given as a comma separated list or by
+> repeating the option.  Four of the categories name a SAM flag:
+> *qcfail* - did not pass the sequencer's filters, flag 0x200;
+> *dup* - PCR or optical duplicate, flag 0x400;
+> *secondary* - another alignment of a read that aligns in more than one place,
+> flag 0x100;
+> *supplementary* - part of a chimeric alignment, flag 0x800.
+
+> The fifth, *multimapping*, is a read that aligns in more than one place.  It
+> is not a SAM flag: it is the NH tag, which counts the places the read aligns.
+> It also removes something different from *secondary*: skipping *secondary*
+> drops the extra alignment records and still uses the read's primary
+> alignment, while skipping *multimapping* drops every alignment of that read.
+> A read with no NH tag is not *multimapping*, since nothing says how many
+> places it aligns; its reads are counted in `unsure_mapped_count`.
+
+> By default *qcfail*, *dup* and *secondary* are skipped, and *supplementary*
+> and *multimapping* are used.  An unmapped alignment contains no introns, so
+> it is always skipped and is not a category.
+
+`--include=categories`
+
+> Use alignments in these categories, undoing the default for them.  As with
+> `--exclude`, give a comma separated list or repeat the option.
+> `--include=qcfail` counts the reads the sequencer's chastity filter flagged,
+> which is what STAR counts in `SJ.out.tab`.  Naming a category in both
+> `--include` and `--exclude` is an error.
 
 `--set-XS-strand-tag`
 
@@ -144,7 +169,60 @@ TSV and BED files will be automatically compressed with `gzip` if they end in `.
 # NOTES
 The computation of strand is problematic.  If the strandness of the experiment is specified, then that is used to determine stand.  If the alignment provides the XS attribute, that is used.  Otherwise, the strand can't be determined from the BAM.  If the genome is provided and a known splice sites are detected, this is then used if the stand is not identified by other methods.
 
-Secondary alignments are not used to support introns.
+Secondary alignments are not used to support introns unless
+`--include=secondary` is given.
+
+# COMPARISON WITH STAR SJ.out.tab
+
+STAR writes its own junction table while aligning.  Its counts and
+intron-prospector's are not expected to be identical, for reasons that are not
+defects in either program.
+
+*Which alignments are counted*
+
+- STAR counts the alignments the sequencer's chastity filter flagged, SAM flag
+  0x200; these are skipped unless `--include=qcfail` is given.  This is
+  normally the largest difference.  On an Illumina WTC11 BAM where 5.3% of
+  reads are flagged, with the same anchor and read count thresholds applied
+  to both sides, `SJ.out.tab` held 6,376 junctions the calls did not;
+  `--include=qcfail` left 270 of them.
+- STAR counts secondary alignments in column 8; these are skipped unless
+  `--include=secondary` is given.  `--exclude=multimapping` goes further and
+  drops every alignment of a read that aligns in more than one place, which
+  STAR has no option to do when writing the tab.
+- `uniq_mapped_count` and `multi_mapped_count` do not partition the reads the
+  way STAR's columns 7 and 8 do.  An alignment with no NH tag, a discordant
+  pair, or a mate that did not map is counted in `unsure_mapped_count`, which
+  `SJ.out.tab` has no counterpart for.
+- When both mates of a pair cross a junction, STAR counts the fragment once and
+  intron-prospector counts each alignment.
+
+*Which junctions are written*
+
+- STAR applies `--outSJfilterOverhangMin` (30 12 12 12, by motif),
+  `--outSJfilterCountUniqueMin` and `--outSJfilterCountTotalMin` (3 1 1 1),
+  `--outSJfilterDistToOtherSJmin` and `--outSJfilterIntronMaxVsReadN` to
+  `SJ.out.tab` only, not to the alignments it writes.  A junction can be in the
+  BAM and not in the tab.
+- Junctions in an annotation given to STAR bypass those filters, so
+  `SJ.out.tab` holds rows with an overhang of 1.
+- `--min-anchor-length=12` is the closest match to STAR's overhang threshold
+  for canonical junctions.
+
+*Columns that do not line up*
+
+- Column 9 of `SJ.out.tab` is the maximum over reads of the smaller of the two
+  overhangs.  `max_left_overhang` and `max_right_overhang` are independent
+  maxima that can come from different reads, so the smaller of the two is an
+  upper bound on STAR's value, not the same number.
+- Columns 2 and 3 of `SJ.out.tab` are the first and last intron base, 1-based
+  inclusive.  The intron calls TSV and the BEDs are 0-based half open, so the
+  start differs by one and the end is the same number.
+- STAR classifies the intron motif itself; `splice_sites` is reported only with
+  `--genome-fasta` and is empty otherwise.
+- STAR marks junctions that are in the annotation it was given, column 6.
+  intron-prospector reads no annotation.
+- `confidence` has no counterpart in `SJ.out.tab`.
 
 # EXAMPLES
 

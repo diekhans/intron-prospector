@@ -3,7 +3,7 @@
 ## next release
 * BED color for GC/AG introns is now U2 green rather than unknown red.
 * Help text and man page regenerated; --strandness description was attached to
-  --unsorted and --set-TS-strand-tag carried a stray copy of the --skip-missing-targets
+  --unsorted and --set-TS-strand-tag had a stray copy of the --skip-missing-targets
   text.
 * Fixed --unsorted --pass-through writing a header and no alignments.
 * Fixed junctions being reported on the wrong chromosome when several input files
@@ -31,7 +31,7 @@
   longer collide and zero the score of a long read junction.
 * A padding CIGAR operation is ignored rather than ending the run.
 * --debug-trace names its junc_strand column, which the header left out while
-  the rows carried it.
+  the rows wrote it.
 * The strand of a read whose mate is unmapped or on another target comes from
   its own orientation, as for an unpaired read, rather than being undetermined.
 * The error for several input BAMs names --pass-through, the option that
@@ -40,8 +40,6 @@
   value silently became 0 and turned the anchor test off.
 * A TSV read by intron-prospector-merge may have CRLF line endings; the
   carriage return is no longer left on the last column.
-* The manual spelled the exclude option --exclude while the program defines
-  --excludes; the manual now matches.
 * The build runs with -Wall -Wextra and is warning free.
 * intron-prospector-merge no longer discards the reads of a record whose
   strand disagrees with the others, issue 15.  It warns, sums the counts, and
@@ -50,6 +48,20 @@
 * A failure while running, such as an unsorted BAM or a missing genome
   sequence, is no longer reported as a command line error with a pointer to
   --help.
+* --exclude names categories of alignment by SAM flag: qcfail, dup, secondary
+  and supplementary.  --include uses a category the default skips, so
+  --include=qcfail counts the reads a sequencer chastity filter flagged, which
+  is what STAR counts in SJ.out.tab.  Either option takes a comma separated
+  list and may be repeated.  The default is what it was: qcfail, dup and
+  secondary skipped, supplementary used, unmapped always skipped.
+* The category of multi-mapped reads is named multimapping.  It is the one
+  category that is not a SAM flag: it reads the NH tag, and it drops every
+  alignment of a read that aligns in more than one place, where secondary
+  drops only the extra alignment records. [incompatibility]
+* --excludes is deprecated.  It warns and is otherwise --exclude.
+* A build from a git tree reports the last release version with +main
+  appended, such as 1.5.1+main, so it is not mistaken for a release.
+* The release process is documented in DEVELOPMENT.md.
 
 ## version 1.5.1 2026-04-22
 * Fixed bug where -S option consumed the next argument
