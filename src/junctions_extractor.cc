@@ -544,6 +544,7 @@ Junction *JunctionsExtractor::create_junction(bam1_t *aln, const JunctionKey &ke
     ijunc_++;
     junctions_[key] = junc;
     junc->count_read(get_read_category(aln), intron_start - aln->core.pos);
+    counted_templates_.record(aln, get_num_aligns(aln), junc);
     return junc;
 }
 
@@ -564,7 +565,11 @@ Junction *JunctionsExtractor::update_junction(bam1_t *aln, const JunctionKey &ke
         junc->anchor_start = anchor_start;
     if (anchor_end > junc->anchor_end)
         junc->anchor_end = anchor_end;
-    junc->count_read(get_read_category(aln), intron_start - aln->core.pos);
+    // a template is one read of support however many alignments it has here
+    if (not counted_templates_.already_counted(aln, junc)) {
+        junc->count_read(get_read_category(aln), intron_start - aln->core.pos);
+        counted_templates_.record(aln, get_num_aligns(aln), junc);
+    }
     return junc;
 }
 
@@ -739,6 +744,7 @@ bool JunctionsExtractor::process_target_alignment(int target_index,
         aln_pending_ = true;
         return false;
     } else {
+        counted_templates_.retire_before(aln->core.pos);
         process_alignment(aln);
         if (out_sam_ != NULL) {
             write_pass_through(aln, in_header_, out_sam_);

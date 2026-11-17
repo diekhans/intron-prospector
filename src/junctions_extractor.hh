@@ -94,6 +94,83 @@ string align_categories_to_string(unsigned cats);
 string align_categories_help();
 
 
+/* Which templates have already counted a junction.
+ *
+ * A read pair whose mates both cross one junction is one read of support, as
+ * SJ.out.tab counts it, and so is a multi-mapping read whose records repeat a
+ * junction.  The first alignment to count a junction makes an entry here,
+ * keyed by the read name and the junction, and any further alignment of that
+ * template finds it and does not count the junction again.
+ *
+ * An alignment supporting a junction has matched bases before the intron, so
+ * it starts before intron_start.  Once a coordinate sorted scan has passed
+ * intron_start no further alignment can support that junction, which is when
+ * retire_before drops the entry.  Only the junctions within a read length of
+ * the scan are held.  The unsorted path has no such point, so its entries
+ * accumulate until the file has been read.
+ *
+ * The read name is stored as a 64 bit hash.  Two names of one junction that
+ * hash alike would be counted as one read rather than two.
+ */
+class CountedTemplates {
+    private:
+    typedef pair<uint64_t, const Junction*> Entry;
+
+    // templates that have counted a junction
+    set<Entry> entries_;
+
+    // entries by the junction start that retires them
+    multimap<hts_pos_t, Entry> by_intron_start_;
+
+    static uint64_t name_hash(bam1_t *aln) {
+        return hash<string>()(string(bam_get_qname(aln)));
+    }
+
+    /* Can this template have another alignment at this junction?  Its mate
+     * can, when both are on this target, and so can another record of a read
+     * that aligns in more than one place.  A single-end read whose NH tag says
+     * it aligns once cannot, so nothing is recorded for it; an NH that is
+     * missing leaves it open, so an entry is made.
+     */
+    static bool template_can_repeat(bam1_t *aln, int num_aligns) {
+        return (((aln->core.flag & BAM_FPAIRED)
+                 and not (aln->core.flag & BAM_FMUNMAP)
+                 and (aln->core.mtid == aln->core.tid))
+                or (num_aligns != 1));
+    }
+
+    public:
+    // has another alignment of this template counted this junction?
+    bool already_counted(bam1_t *aln, const Junction *junc) const {
+        // the common case is nothing recorded, which skips hashing the name
+        return (not entries_.empty())
+            and (entries_.count(Entry(name_hash(aln), junc)) > 0);
+    }
+
+    // record that this alignment counted this junction
+    void record(bam1_t *aln, int num_aligns, const Junction *junc) {
+        if (template_can_repeat(aln, num_aligns)) {
+            Entry entry(name_hash(aln), junc);
+            entries_.insert(entry);
+            by_intron_start_.insert(pair<hts_pos_t, Entry>(junc->intron_start, entry));
+        }
+    }
+
+    // drop the entries for junctions the scan has passed
+    void retire_before(hts_pos_t pos) {
+        multimap<hts_pos_t, Entry>::iterator it = by_intron_start_.begin();
+        while ((it != by_intron_start_.end()) and (it->first < pos)) {
+            entries_.erase(it->second);
+            by_intron_start_.erase(it++);
+        }
+    }
+
+    void clear() {
+        entries_.clear();
+        by_intron_start_.clear();
+    }
+};
+
 // The class that deals with creating the junctions.
 // Coordinate-sorted BAM are require to process one target
 // at a time, reducing memory usage.
@@ -143,6 +220,9 @@ private:
 
     // junctions the splice site filter rejected, so the decision is made once
     set<JunctionKey> rejected_;
+
+    // junctions already counted for a template, so each is counted once
+    CountedTemplates counted_templates_;
 
     // missing genomic sequence that have been warned about
     set<string> missing_genomic_warned_;
@@ -257,6 +337,7 @@ public:
     void clear() {
         junctions_.clear();
         rejected_.clear();
+        counted_templates_.clear();
     }
     
     // Open a BAM file for process

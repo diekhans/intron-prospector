@@ -56,7 +56,7 @@ test: intron_prospectorTests intron_prospector_mergeTests
 #####
 intron_prospectorTests: basicTests minReadCountTests multiTests fake10Tests regressTests ontTests multiBamTests \
 	sjfilterTests strandTagTests parityTests errorTests defectTests defect2Tests \
-	categoryTests
+	categoryTests templateCountTests
 
 ###
 # basic tests
@@ -99,6 +99,32 @@ testBasic5: mkout ${basic_bam}
 	${diff_out}
 
 ##
+# A read is counted once per junction, however many alignments it has there.
+##
+templateCountTests: testMatePairCount testMatePairCountUnsorted testMultiRecordCount
+
+# a pair whose mates both cross a junction is one read, a pair whose mates
+# cross different junctions is one read of each, and the overhangs take the
+# longest anchor of either mate, 15, not the one that was counted
+testMatePairCount: mkout
+	${intron_prospector} ${conf0} --intron-calls=output/$@.introns.tsv \
+	    input/mate-pair-counts.sam
+	${diff_tsv}
+
+# the unsorted path has no point at which a junction can take no more reads,
+# so it holds every read name, and must count the same
+testMatePairCountUnsorted: mkout
+	${intron_prospector} ${conf0} --unsorted --intron-calls=output/$@.introns.tsv \
+	    input/mate-pair-counts.sam
+	${diff} expected/testMatePairCount.introns.tsv output/$@.introns.tsv
+
+# four alignment records of one multi-mapping pair at one junction are one read
+testMultiRecordCount: mkout
+	${intron_prospector} ${conf0} --include=secondary --intron-calls=output/$@.introns.tsv \
+	    input/multi-record-counts.sam
+	${diff_tsv}
+
+##
 # Minimum junction supporting read count tests.
 ##
 minReadCountTests: testMinReadDefault testMinReadGTE testMinReadBelowThreshold testMinReadFilterAllJuncs
@@ -116,9 +142,9 @@ testMinReadBelowThreshold: mkout ${basic_bam}
 	${diff_out}
 
 # test read count filter against multi junction bam file and filter out junctions that are less than the threshold and keep anything greater than or equal to the threshold. 
-# Threshold matches the read count of a junction exactly. The junciton with read count 45 should be in the output.
+# Threshold matches the read count of a junction exactly. The junciton with read count 34 should be in the output.
 testMinReadGTE: mkout ${basic_bam}
-	${intron_prospector} ${conf0} --min-read-count=45 --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv ${basic_bam}
+	${intron_prospector} ${conf0} --min-read-count=34 --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv ${basic_bam}
 	${diff_out}
 
 # test that high min read count threshold still outputs files even if they are empty
@@ -297,7 +323,7 @@ testMergeMinReadBelowThreshold: mkout
 
 # test read count filter where threshold equals an expected merged junction count. Tests that the functionality is >= and not just >.
 testMergeMinReadGTE: mkout
-	${intron_prospector_merge} --min-read-count=135 --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv \
+	${intron_prospector_merge} --min-read-count=102 --junction-bed=output/$@.juncs.bed --intron-bed=output/$@.introns.bed --intron-calls=output/$@.introns.tsv \
 	    expected/testBasic1.introns.tsv expected/testBasic3.introns.tsv expected/testBasic4.introns.tsv
 	${diff_out}
 

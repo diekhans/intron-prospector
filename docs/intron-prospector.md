@@ -139,7 +139,7 @@ TSV and BED files will be automatically compressed with `gzip` if they end in `.
 * intron_end - zero based ending coordinates of intron.
 * strand - `+`, `-`, or `.` if not known.  This is set only if experiment is stranded, it is not set from genomic sequence.
 * uniq_mapped_count - number of uniquely mapped reads supporting the junction.
-* multi_mapped_count - number of uniquely mapped reads supporting the junction.
+* multi_mapped_count - number of multi-mapped reads supporting the junction.
 * unsure_mapped_count - number of reads that are either in discordant or partial mapped pair or do not have the BAM `NH` tag.
 * max_left_overhang - maximum number of bases overlapping the exon upstream of the intron.
 * max_right_overhang - maximum number of bases overlapping the exon downstream of the intron.
@@ -194,8 +194,11 @@ defects in either program.
   way STAR's columns 7 and 8 do.  An alignment with no NH tag, a discordant
   pair, or a mate that did not map is counted in `unsure_mapped_count`, which
   `SJ.out.tab` has no counterpart for.
-- When both mates of a pair cross a junction, STAR counts the fragment once and
-  intron-prospector counts each alignment.
+- A read supporting a junction is counted once, as STAR counts it.  A pair
+  whose mates both cross one junction is one read, and so is a multi-mapping
+  read whose alignment records repeat a junction.  The overhangs take every
+  alignment, counted or not, so a mate with a longer anchor still sets
+  `max_left_overhang` or `max_right_overhang`.
 
 *Which junctions are written*
 

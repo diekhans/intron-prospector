@@ -1,6 +1,17 @@
 # Major and user-visible changes
 
 ## next release
+* A read supporting a junction is counted once, as `SJ.out.tab` counts it.  A
+  pair whose mates both cross one junction was counted twice, and a
+  multi-mapping read was counted once for each of its alignment records at the
+  junction.  The overhangs still take every alignment, so an uncounted mate
+  with a longer anchor still sets `max_left_overhang` or
+  `max_right_overhang`.  The confidence is computed over the offsets of the
+  reads counted, so a junction supported by one pair whose mates both cross it
+  now has one offset rather than two and a confidence of 0, which the default
+  `--min-confidence-score=1.0` drops.  On the WTC11 benchmark the counts fall
+  by a median of 24% and then equal the `SJ.out.tab` counts on 99.1% of the
+  junctions the two share. [incompatibility]
 * BED color for GC/AG introns is now U2 green rather than unknown red.
 * Help text and man page regenerated; --strandness description was attached to
   --unsorted and --set-TS-strand-tag had a stray copy of the --skip-missing-targets
