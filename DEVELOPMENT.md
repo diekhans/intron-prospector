@@ -53,7 +53,10 @@ Notes:
 
 ### BioConda
 - The GitHub release triggers an automatic version bump pull request against
-  bioconda/bioconda-recipes.
+  bioconda/bioconda-recipes, titled `Update intron-prospector to x.x.x`.  The
+  bot sets the version and the sha256 in the recipe, so nothing is edited by
+  hand unless the build changes.  It takes a few hours to appear; wait for it
+  rather than opening one.
 - When its tests pass, comment on that pull request:
   `@BiocondaBot please add label`.  This clears the `Review Required` and
   `Merging is Blocked` notifications.
