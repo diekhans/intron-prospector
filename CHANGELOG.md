@@ -1,6 +1,6 @@
 # Major and user-visible changes
 
-## next release
+## version 1.6.0 2026-11-19
 * A read supporting a junction is counted once, as `SJ.out.tab` counts it.  A
   pair whose mates both cross one junction was counted twice, and a
   multi-mapping read was counted once for each of its alignment records at the

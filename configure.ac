@@ -1,4 +1,4 @@
-AC_INIT([intron-prospector], 1.5.1)
+AC_INIT([intron-prospector], 1.6.0)
 
 ##
 # rebuild with:

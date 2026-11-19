@@ -31,8 +31,17 @@ Notes:
 - `make -j 32`
 - `make -j 32 test`
 - `make install`
-- Run the installed `intron-prospector --version` and check that it reports
-  the release version with no `+main`.
+- Run the installed `intron-prospector --version`.  A build of the git tree
+  reports the release version with `+main`, since `configure` appends it
+  whenever `.git` exists.
+- Check the version a release archive reports, which is what users get, by
+  building one that has no `.git`:
+  ```
+  git archive --prefix=intron-prospector-1.x.x/ v1.x.x | tar -C /some/test/dir -xf -
+  cd /some/test/dir/intron-prospector-1.x.x && ./configure && make -j 32
+  ./bin/intron-prospector --version
+  ```
+  It reports the release version with no `+main`.
 
 ### Tag and publish
 - `git commit -am 'v1.x.x release'`
